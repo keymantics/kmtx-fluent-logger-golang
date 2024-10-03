@@ -109,6 +109,7 @@ type Fluent struct {
 	// cancelDialings is used by Close() to stop any in-progress dialing.
 	cancelDialings context.CancelFunc
 	pending        chan *msgToSend
+	droppedLogsCount int64
 	pendingMutex   sync.RWMutex
 	closed         bool
 	wg             sync.WaitGroup
@@ -327,6 +328,14 @@ func (f *Fluent) GetPendingLogsCount() int {
 	return 0
 }
 
+func (f *Fluent) GetCurrentDroppedLogsCount() int64 {
+	if f.Config.Async {
+		count := f.droppedLogsCount
+		f.droppedLogsCount = 0
+		return count
+	}
+	return 0
+}
 // getUniqueID returns a base64 encoded unique ID that can be used for chunk/ack
 // mechanism, see
 // https://github.com/fluent/fluentd/wiki/Forward-Protocol-Specification-v1#option
@@ -425,6 +434,7 @@ func (f *Fluent) appendBuffer(msg *msgToSend) error {
 	select {
 	case f.pending <- msg:
 	default:
+		f.droppedLogsCount += 1
 		return fmt.Errorf("fluent#appendBuffer: Buffer full, limit %v", f.Config.BufferLimit)
 	}
 	return nil
