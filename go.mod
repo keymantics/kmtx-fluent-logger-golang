@@ -1,6 +1,6 @@
 module github.com/keymantics/kmtx-fluent-logger-golang
 
-go 1.23.1
+go 1.21.13
 
 require (
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869
