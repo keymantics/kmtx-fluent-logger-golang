@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"bytes"
@@ -107,12 +108,12 @@ type Fluent struct {
 	// stopRunning is used in async mode to signal to run() it should abort.
 	stopRunning chan struct{}
 	// cancelDialings is used by Close() to stop any in-progress dialing.
-	cancelDialings context.CancelFunc
-	pending        chan *msgToSend
-	droppedLogsCount uint64
-	pendingMutex   sync.RWMutex
-	closed         bool
-	wg             sync.WaitGroup
+	cancelDialings   context.CancelFunc
+	pending          chan *msgToSend
+	droppedLogsCount atomic.Uint64
+	pendingMutex     sync.RWMutex
+	closed           bool
+	wg               sync.WaitGroup
 
 	// time at which the most recent connection to fluentd-address was established.
 	latestReconnectTime time.Time
@@ -329,8 +330,9 @@ func (f *Fluent) GetPendingLogsCount() int {
 }
 
 func (f *Fluent) GetDroppedLogsCount() uint64 {
-	return f.droppedLogsCount
+	return f.droppedLogsCount.Load()
 }
+
 // getUniqueID returns a base64 encoded unique ID that can be used for chunk/ack
 // mechanism, see
 // https://github.com/fluent/fluentd/wiki/Forward-Protocol-Specification-v1#option
@@ -429,7 +431,7 @@ func (f *Fluent) appendBuffer(msg *msgToSend) error {
 	select {
 	case f.pending <- msg:
 	default:
-		f.droppedLogsCount += 1
+		f.droppedLogsCount.Add(1)
 		return fmt.Errorf("fluent#appendBuffer: Buffer full, limit %v", f.Config.BufferLimit)
 	}
 	return nil
